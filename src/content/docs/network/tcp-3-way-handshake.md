@@ -19,15 +19,17 @@ tags: [network, tcp]
 
 ## 핵심 개념
 
-```
-Client                                   Server
-  |                                        |  (LISTEN)
-  |---- SYN      seq=x -----------------→  |
-  |  (SYN-SENT)                            |
-  |  ←-------- SYN+ACK  seq=y, ack=x+1 ----|
-  |                                        |  (SYN-RECEIVED)
-  |---- ACK      ack=y+1 ---------------→  |
-  |  (ESTABLISHED)                         |  (ESTABLISHED)
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    Note over S: LISTEN
+    C->>S: SYN (seq=x)
+    Note over C: SYN-SENT
+    S->>C: SYN+ACK (seq=y, ack=x+1)
+    Note over S: SYN-RECEIVED
+    C->>S: ACK (ack=y+1)
+    Note over C,S: ESTABLISHED
 ```
 
 - **SYN (seq=x)**: 클라이언트가 자기 ISN `x`를 알린다.

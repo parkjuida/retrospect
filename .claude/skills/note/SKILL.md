@@ -20,7 +20,13 @@ description: 지금까지 나눈 CS 개념 대화를 Retrospect 사이트의 노
 
 - **frontmatter**: `date`는 오늘 날짜. `tags`는 소문자 영어 kebab-case로 2~4개 (예: `network`, `tcp`). `description`은 한 문장.
 - **한 줄 요약 / 처음 가졌던 질문**: 사용자가 대화에서 **실제로 한 말**을 바탕으로 쓴다. 사용자가 무엇을 헷갈려 했는지 대화에서 드러나지 않으면 지어내지 말고 `<!-- TODO: 내 말로 써보기 -->`만 남긴다.
-- **핵심 개념**: 대화에서 합의된 설명을 정리한다. 다이어그램은 코드 블록 안에 ASCII로 그린다.
+- **핵심 개념**: 대화에서 합의된 설명을 정리한다.
+- **다이어그램**: 코드 블록 안에 ASCII로 그리지 않는다. 한글 폭이 영문 두 칸과 맞지 않아서 줄이 어긋난다. 대신 모양에 따라 고른다.
+  - 시간 순서로 주고받는 흐름 (프로토콜, 호출 순서): ` ```mermaid ` 의 `sequenceDiagram`
+  - 상태 전이, 순서도: ` ```mermaid ` 의 `stateDiagram-v2` 또는 `flowchart`
+  - 단계별로 값이 바뀌는 과정 (경쟁 상태 등): 마크다운 표
+  - 층층이 쌓인 구조 (메모리 구조, 스택 프레임, 헤더): `src/styles/diagram.css`의 `diagram-stack` HTML (사용법은 파일 상단 주석)
+  - 사용 예: `src/content/docs/os/process-vs-thread.md`, `src/content/docs/network/tcp-3-way-handshake.md`
 - **직접 해보기**: 사용자가 직접 돌려본 코드나 명령이 있으면 결과와 함께 넣는다. 없으면 따라 해볼 수 있는 짧은 실험을 제안한다.
 - **헷갈렸던 포인트**: 대화 중에 사용자가 되물었거나 오해를 바로잡은 지점.
 - **복습 퀴즈**: 2~4문항. 각 문항을 `<details><summary>Q. …</summary> 답 </details>` 형태로 답을 접어둔다.
