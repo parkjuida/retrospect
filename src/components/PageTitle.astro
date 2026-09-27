@@ -1,0 +1,58 @@
+---
+// Starlight 기본 제목 아래에 공부한 날짜 · 복습한 날짜 · 태그를 보여줘.
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+
+const { date, lastReviewed, tags } = Astro.locals.starlightRoute.entry.data;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const fmt = (d: Date) => d.toISOString().slice(0, 10);
+---
+
+<Default />
+{
+	(date || lastReviewed || tags.length > 0) && (
+		<div class="note-meta">
+			{date && <span>공부 {fmt(date)}</span>}
+			{lastReviewed && <span>복습 {fmt(lastReviewed)}</span>}
+			{tags.length > 0 && (
+				<ul class="tags">
+					{tags.map((tag) => (
+						<li>
+							<a href={`${base}/tags/#${tag}`}>#{tag}</a>
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
+	)
+}
+
+<style>
+	.note-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+		margin-top: 0.75rem;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+	}
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.tags a {
+		padding: 0.125rem 0.5rem;
+		border-radius: 999px;
+		background: var(--sl-color-accent-low);
+		color: var(--sl-color-accent-high);
+		text-decoration: none;
+	}
+	.tags a:hover {
+		background: var(--sl-color-accent);
+		color: var(--sl-color-black);
+	}
+</style>

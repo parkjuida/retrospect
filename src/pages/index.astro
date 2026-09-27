@@ -1,0 +1,81 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { getCollection } from 'astro:content';
+import { categories } from '../categories.mjs';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const notes = await getCollection('docs');
+
+const categoryCards = categories
+	.map((c) => ({
+		...c,
+		notes: notes.filter((n) => n.id.startsWith(`${c.slug}/`)),
+	}))
+	.filter((c) => c.notes.length > 0);
+
+const recent = notes
+	.filter((n) => n.data.date)
+	.sort((a, b) => b.data.date!.getTime() - a.data.date!.getTime())
+	.slice(0, 8);
+
+const fmt = (d: Date) => d.toISOString().slice(0, 10);
+---
+
+<StarlightPage
+	frontmatter={{
+		title: '홈',
+		description: 'CS 개념을 공부하며 남긴 회고 노트',
+		template: 'splash',
+		hero: {
+			title: 'Retrospect',
+			tagline: 'CS 개념을 공부하며 헷갈렸던 것, 직접 확인한 것, 내 말로 다시 정리한 것들을 모아둔 곳.',
+			actions: [
+				{ text: '태그로 둘러보기', link: `${base}/tags/`, icon: 'right-arrow' },
+			],
+		},
+	}}
+>
+	<h2>카테고리</h2>
+	<CardGrid>
+		{
+			categoryCards.map((c) => (
+				<LinkCard
+					title={c.label}
+					description={`노트 ${c.notes.length}개`}
+					href={`${base}/${c.notes[0].id}/`}
+				/>
+			))
+		}
+	</CardGrid>
+
+	<h2>최근 노트</h2>
+	<ul class="recent">
+		{
+			recent.map((n) => (
+				<li>
+					<time>{fmt(n.data.date!)}</time>
+					<a href={`${base}/${n.id}/`}>{n.data.title}</a>
+				</li>
+			))
+		}
+	</ul>
+</StarlightPage>
+
+<style>
+	.recent {
+		list-style: none;
+		padding: 0;
+	}
+	.recent li {
+		display: flex;
+		gap: 1rem;
+		align-items: baseline;
+	}
+	.recent time {
+		flex-shrink: 0;
+		font-variant-numeric: tabular-nums;
+		color: var(--sl-color-gray-3);
+		font-size: var(--sl-text-sm);
+	}
+</style>
