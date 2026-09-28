@@ -26,7 +26,7 @@ export default defineConfig({
 			locales: {
 				root: { label: '한국어', lang: 'ko' },
 			},
-			customCss: ['./src/styles/tokens.css', './src/styles/diagram.css'],
+			customCss: ['./src/styles/tokens.css', './src/styles/diagram.css', './src/styles/viz.css'],
 			components: {
 				PageTitle: './src/components/PageTitle.astro',
 			},

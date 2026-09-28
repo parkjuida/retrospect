@@ -1,0 +1,227 @@
+---
+// IVF가 공간을 클러스터 조각(보로노이 영역)으로 나누고, 질문과 가까운 중심 nprobe개의 조각만 뒤지는 과정을 보여주는 시각화.
+// .mdx 노트에서 import 해서 <IvfViz /> 로 쓴다. 공통 스타일은 src/styles/viz.css.
+import VizLegend from './VizLegend.astro';
+---
+
+<div class="viz not-content" data-ivf>
+	<div class="viz-row">
+		<label class="viz-field">
+			<span>nlist (클러스터 수)</span>
+			<input type="range" data-input="nlist" min="2" max="24" step="1" value="8" />
+			<output data-out="nlist">8</output>
+		</label>
+		<label class="viz-field">
+			<span>nprobe (뒤질 클러스터 수)</span>
+			<input type="range" data-input="nprobe" min="1" max="8" step="1" value="1" />
+			<output data-out="nprobe">1</output>
+		</label>
+	</div>
+
+	<div class="viz-row">
+		<div class="viz-group">
+			<button type="button" data-act="miss">놓치는 위치 찾기</button>
+			<button type="button" data-act="query">질문 위치 바꾸기</button>
+			<button type="button" data-act="new">새 데이터</button>
+		</div>
+	</div>
+
+	<svg class="viz-canvas" data-map viewBox="0 0 600 360" role="img" aria-label="IVF 클러스터 지도"></svg>
+
+	<p class="viz-status" data-status aria-live="polite"></p>
+
+	<VizLegend
+		items={[
+			{ shape: 'dot', color: 'var(--rs-neutral)', label: '저장된 점' },
+			{ shape: 'square-outline', color: 'var(--rs-neutral)', label: '클러스터 중심 (대표값)' },
+			{ shape: 'square', color: 'var(--rs-emphasis)', label: '뒤지기로 고른 중심 (숫자는 가까운 순위)' },
+			{ shape: 'area', color: 'var(--rs-path-low)', label: '뒤진 클러스터 영역' },
+			{ shape: 'dot', color: 'var(--rs-path)', label: '거리를 계산한 점' },
+			{ shape: 'ring', color: 'var(--rs-result)', label: '찾은 1등' },
+			{ shape: 'dashed-ring', color: 'var(--rs-reference)', label: '진짜 1등' },
+			{ shape: 'cross', color: 'var(--rs-text-strong)', label: '질문 (지도 클릭이나 "질문 위치 바꾸기"로 옮김)' },
+		]}
+	/>
+</div>
+
+<script>
+	import { blobPoints, kmeans, squaredDistance as sq, toViewBox, type Point } from '../scripts/viz';
+
+	const W = 600;
+	const H = 360;
+	const PAD = 8;
+
+	// 색은 tokens.css의 역할 토큰만 쓴다
+	const COLOR = {
+		probed: 'var(--rs-emphasis)',
+		area: 'var(--rs-path-low)',
+		visited: 'var(--rs-path)',
+		found: 'var(--rs-result)',
+		truth: 'var(--rs-reference)',
+		query: 'var(--rs-text-strong)',
+		point: 'var(--rs-neutral)',
+		border: 'var(--rs-border)',
+		surface: 'var(--rs-surface)',
+	};
+
+	const f = (v: number) => v.toFixed(1);
+
+	/** 다각형에서 a·x + b·y <= c 인 쪽만 남긴다 (Sutherland–Hodgman) */
+	function clipHalfPlane(poly: Point[], a: number, b: number, c: number) {
+		const out: Point[] = [];
+		for (let i = 0; i < poly.length; i++) {
+			const p1 = poly[i];
+			const p2 = poly[(i + 1) % poly.length];
+			const in1 = a * p1.x + b * p1.y <= c;
+			const in2 = a * p2.x + b * p2.y <= c;
+			if (in1) out.push(p1);
+			if (in1 !== in2) {
+				const t = (c - a * p1.x - b * p1.y) / (a * (p2.x - p1.x) + b * (p2.y - p1.y));
+				out.push({ x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) });
+			}
+		}
+		return out;
+	}
+
+	function setup(root: HTMLElement) {
+		const svg = root.querySelector<SVGSVGElement>('[data-map]')!;
+		const status = root.querySelector<HTMLElement>('[data-status]')!;
+		const nprobeInput = root.querySelector<HTMLInputElement>('[data-input="nprobe"]')!;
+		const output = (name: string) => root.querySelector<HTMLOutputElement>(`[data-out="${name}"]`)!;
+
+		let seed = 3;
+		let nlist = 8;
+		let nprobe = 1;
+		let pts: Point[] = [];
+		let centroids: Point[] = [];
+		let assign: number[] = [];
+		let cells: Point[][] = [];
+		let query: Point = { x: 300, y: 175 };
+
+		function makeData() {
+			pts = blobPoints({ seed, width: W, height: H, pad: PAD, blobs: 7, perBlob: [28, 52], spread: [16, 46], noise: 40 });
+		}
+
+		/** 중심 i에 가장 가까운 영역 = 다른 모든 중심과의 수직이등분선 안쪽 */
+		function cellOf(i: number) {
+			let poly: Point[] = [
+				{ x: 0, y: 0 },
+				{ x: W, y: 0 },
+				{ x: W, y: H },
+				{ x: 0, y: H },
+			];
+			const ci = centroids[i];
+			centroids.forEach((cj, j) => {
+				if (j !== i) poly = clipHalfPlane(poly, 2 * (cj.x - ci.x), 2 * (cj.y - ci.y), cj.x ** 2 + cj.y ** 2 - ci.x ** 2 - ci.y ** 2);
+			});
+			return poly;
+		}
+
+		function train() {
+			({ centroids, assign } = kmeans(pts, nlist, seed * 7 + nlist));
+			cells = centroids.map((_, i) => cellOf(i));
+		}
+
+		function search(q: Point) {
+			const order = centroids.map((_, k) => k).sort((a, b) => sq(q, centroids[a]) - sq(q, centroids[b]));
+			const probe = order.slice(0, nprobe);
+			const probed = new Set(probe);
+			const candidates = pts.flatMap((_, i) => (probed.has(assign[i]) ? [i] : []));
+			const nearest = (list: number[]) => list.reduce((best, i) => (sq(q, pts[i]) < sq(q, pts[best]) ? i : best), list[0]);
+			return { probe, candidates, found: nearest(candidates), truth: nearest(pts.map((_, i) => i)) };
+		}
+
+		function draw() {
+			const s = search(query);
+			const probed = new Set(s.probe);
+			const visited = new Set(s.candidates);
+			let o = '';
+
+			cells.forEach((poly, k) => {
+				if (poly.length < 3) return;
+				const fill = probed.has(k) ? COLOR.area : 'none';
+				o += `<polygon points="${poly.map((p) => `${f(p.x)},${f(p.y)}`).join(' ')}" style="fill:${fill};stroke:${COLOR.border}" stroke-width="1"/>`;
+			});
+			for (const k of s.probe) {
+				o += `<line x1="${f(query.x)}" y1="${f(query.y)}" x2="${f(centroids[k].x)}" y2="${f(centroids[k].y)}" style="stroke:${COLOR.probed}" stroke-width="1" stroke-dasharray="3 3"/>`;
+			}
+			pts.forEach((p, i) => {
+				o += visited.has(i)
+					? `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="3" style="fill:${COLOR.visited}"/>`
+					: `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="2.3" style="fill:${COLOR.point}"/>`;
+			});
+			centroids.forEach((c, k) => {
+				const style = probed.has(k) ? `fill:${COLOR.probed}` : `fill:${COLOR.surface};stroke:${COLOR.point}`;
+				o += `<rect x="${f(c.x - 5)}" y="${f(c.y - 5)}" width="10" height="10" rx="2" style="${style}" stroke-width="1.4"/>`;
+			});
+			s.probe.forEach((k, rank) => {
+				o += `<text x="${f(centroids[k].x + 8)}" y="${f(centroids[k].y - 7)}" font-size="12" font-weight="600" style="fill:${COLOR.probed}">${rank + 1}</text>`;
+			});
+			o += `<circle cx="${f(pts[s.found].x)}" cy="${f(pts[s.found].y)}" r="7" fill="none" style="stroke:${COLOR.found}" stroke-width="2.2"/>`;
+			o += `<circle cx="${f(pts[s.truth].x)}" cy="${f(pts[s.truth].y)}" r="10" fill="none" style="stroke:${COLOR.truth}" stroke-width="1.6" stroke-dasharray="3 2.5"/>`;
+			o += `<path d="M${f(query.x - 6)} ${f(query.y - 6)}L${f(query.x + 6)} ${f(query.y + 6)}M${f(query.x - 6)} ${f(query.y + 6)}L${f(query.x + 6)} ${f(query.y - 6)}" style="stroke:${COLOR.query}" stroke-width="2" stroke-linecap="round"/>`;
+			svg.innerHTML = o;
+
+			const hit = s.found === s.truth;
+			status.textContent = `중심 ${nlist}개와 비교 + 고른 클러스터 ${nprobe}개 안의 점 ${s.candidates.length}개와 비교 = 거리 계산 ${nlist + s.candidates.length}번 (전체 ${pts.length}개) · 찾은 1등이 진짜 1등과 ${hit ? '같아' : '달라 (놓침)'}`;
+		}
+
+		const randomQuery = (): Point => ({ x: PAD + Math.random() * (W - 2 * PAD), y: PAD + Math.random() * (H - 2 * PAD) });
+
+		root.querySelector<HTMLInputElement>('[data-input="nlist"]')!.addEventListener('input', (e) => {
+			nlist = Number((e.target as HTMLInputElement).value);
+			output('nlist').textContent = String(nlist);
+			nprobeInput.max = String(nlist);
+			if (nprobe > nlist) {
+				nprobe = nlist;
+				nprobeInput.value = String(nprobe);
+				output('nprobe').textContent = String(nprobe);
+			}
+			train();
+			draw();
+		});
+		nprobeInput.addEventListener('input', () => {
+			nprobe = Number(nprobeInput.value);
+			output('nprobe').textContent = String(nprobe);
+			draw();
+		});
+
+		const actions: Record<string, () => void> = {
+			new: () => {
+				seed += 1;
+				makeData();
+				train();
+				draw();
+			},
+			query: () => {
+				query = randomQuery();
+				draw();
+			},
+			miss: () => {
+				for (let t = 0; t < 1500; t++) {
+					const q = randomQuery();
+					const s = search(q);
+					if (s.found !== s.truth) {
+						query = q;
+						draw();
+						return;
+					}
+				}
+				draw();
+				status.textContent = '지금 설정에서는 놓치는 위치를 못 찾았어. nprobe를 줄이거나 nlist를 늘려봐.';
+			},
+		};
+		root.querySelectorAll<HTMLButtonElement>('[data-act]').forEach((b) => b.addEventListener('click', actions[b.dataset.act!]));
+
+		svg.addEventListener('click', (e) => {
+			query = toViewBox(svg, e);
+			draw();
+		});
+
+		makeData();
+		train();
+		draw();
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-ivf]').forEach(setup);
+</script>

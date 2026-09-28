@@ -27,6 +27,7 @@ CS 개념을 공부하며 남긴 회고 노트 사이트 (Astro + Starlight). �
 
 - 노트: `src/content/docs/<category>/<slug>.md`, 형식은 `templates/note.md`. 컴포넌트(`src/components/`)를 넣는 노트만 `.mdx`로 쓴다.
 - 도식과 시각화의 색, 모서리 값은 `src/styles/tokens.css`의 역할 토큰(`--rs-*`)만 쓴다. 층층이 쌓인 구조 도식은 `src/styles/diagram.css`.
+- 인터랙티브 시각화는 `src/components/*Viz.astro`. 공통 스타일 `src/styles/viz.css`, 범례 `VizLegend.astro`, 도구 `src/scripts/viz.ts`를 쓰고, 노트에서는 해당 개념 설명 바로 아래에 넣는다.
 - 카테고리 목록: `src/categories.mjs`. 노트가 있는 카테고리만 사이드바와 홈에 자동으로 뜬다.
 - frontmatter 확장 필드(`date`, `lastReviewed`, `tags`): `src/content.config.ts`
 - 대화를 노트로 정리하는 방법: `.claude/skills/note/SKILL.md`

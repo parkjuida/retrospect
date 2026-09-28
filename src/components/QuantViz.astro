@@ -1,0 +1,224 @@
+---
+// 2차원 점들을 SQ, PQ, BQ, 통째로 k-means로 압축했을 때 각 점이 어디로 복원되는지 비교하는 시각화.
+// PQ의 "코드북 칸 수 vs 표현할 수 있는 위치 수" 차이를 격자로 보여준다.
+// .mdx 노트에서 import 해서 <QuantViz /> 로 쓴다. 공통 스타일은 src/styles/viz.css.
+import VizLegend from './VizLegend.astro';
+---
+
+<div class="viz not-content" data-quant>
+	<div class="viz-row">
+		<div class="viz-group" role="group" aria-label="양자화 방식">
+			<button type="button" data-method="sq" aria-pressed="true">스칼라 (SQ)</button>
+			<button type="button" data-method="pq" aria-pressed="false">곱 양자화 (PQ)</button>
+			<button type="button" data-method="bq" aria-pressed="false">이진 (BQ)</button>
+			<button type="button" data-method="km" aria-pressed="false">통째로 k-means (비교용)</button>
+		</div>
+	</div>
+
+	<div class="viz-row">
+		<label class="viz-field">
+			<span>조각당 비트 수</span>
+			<input type="range" data-input="bits" min="1" max="4" step="1" value="2" />
+			<output data-out="bits">2</output>
+		</label>
+		<div class="viz-group">
+			<button type="button" data-act="new">새 데이터</button>
+		</div>
+	</div>
+
+	<svg class="viz-canvas is-static" data-map viewBox="0 0 600 360" role="img" aria-label="양자화 결과"></svg>
+
+	<div class="viz-stats">
+		<div class="viz-stat"><p class="label">코드북 칸 수</p><p class="value" data-stat="cells">-</p></div>
+		<div class="viz-stat"><p class="label">표현할 수 있는 위치</p><p class="value" data-stat="points">-</p></div>
+		<div class="viz-stat"><p class="label">벡터 하나 크기 (원본 64비트)</p><p class="value" data-stat="size">-</p></div>
+		<div class="viz-stat"><p class="label">평균 오차</p><p class="value" data-stat="error">-</p></div>
+	</div>
+
+	<p class="viz-status" data-status aria-live="polite"></p>
+
+	<VizLegend
+		items={[
+			{ shape: 'dot', color: 'var(--rs-neutral)', label: '원본 점' },
+			{ shape: 'tick', color: 'var(--rs-emphasis)', label: '코드북 칸 (축 위 눈금)' },
+			{ shape: 'square-outline', color: 'var(--rs-emphasis)', label: '복원될 수 있는 위치' },
+			{ shape: 'thin-line', color: 'var(--rs-path)', label: '오차 (원본 → 복원 위치)' },
+			{ shape: 'thin-line', color: 'var(--rs-border)', label: '이진 양자화의 기준선 (평균)' },
+		]}
+	/>
+</div>
+
+<script>
+	import { blobPoints, kmeans, kmeans1d, nearestValue, squaredDistance, type Point } from '../scripts/viz';
+
+	type Method = 'sq' | 'pq' | 'bq' | 'km';
+	type Result = {
+		ticksX?: number[]; // x 조각의 코드북 (SQ, PQ)
+		ticksY?: number[]; // y 조각의 코드북 (SQ, PQ)
+		centers?: Point[]; // 복원 위치 목록 (BQ, k-means)
+		splitAt?: Point; // BQ 기준선
+		rec: Point[]; // 각 점이 복원되는 위치
+		cells: number;
+		points: number;
+		bitsPerVector: number;
+		note: string;
+	};
+
+	const W = 600;
+	const H = 360;
+	const PAD = 28;
+
+	// 색은 tokens.css의 역할 토큰만 쓴다
+	const COLOR = {
+		codebook: 'var(--rs-emphasis)',
+		error: 'var(--rs-path)',
+		point: 'var(--rs-neutral)',
+		split: 'var(--rs-border)',
+	};
+
+	const f = (v: number) => v.toFixed(1);
+
+	function setup(root: HTMLElement) {
+		const svg = root.querySelector<SVGSVGElement>('[data-map]')!;
+		const status = root.querySelector<HTMLElement>('[data-status]')!;
+		const stat = (name: string) => root.querySelector<HTMLElement>(`[data-stat="${name}"]`)!;
+
+		let seed = 5;
+		let method: Method = 'sq';
+		let bits = 2;
+		let pts: Point[] = [];
+
+		const makeData = () => {
+			pts = blobPoints({ seed, width: W, height: H, pad: PAD + 4, blobs: 5, perBlob: [25, 45], spread: [14, 54], noise: 0 });
+		};
+
+		function quantize(): Result {
+			const L = 2 ** bits;
+			const xs = pts.map((p) => p.x);
+			const ys = pts.map((p) => p.y);
+			const snap = (tx: number[], ty: number[]) => pts.map((p) => ({ x: nearestValue(p.x, tx), y: nearestValue(p.y, ty) }));
+
+			if (method === 'sq') {
+				// 최솟값~최댓값을 L칸으로 고르게
+				const levels = (vals: number[]) => {
+					const lo = Math.min(...vals);
+					const hi = Math.max(...vals);
+					return Array.from({ length: L }, (_, i) => lo + (i * (hi - lo)) / (L - 1));
+				};
+				const ticksX = levels(xs);
+				const ticksY = levels(ys);
+				return {
+					ticksX,
+					ticksY,
+					rec: snap(ticksX, ticksY),
+					cells: 2 * L,
+					points: L * L,
+					bitsPerVector: 2 * bits,
+					note: `차원마다 최솟값~최댓값을 ${L}칸으로 고르게 나눴어. 데이터가 없는 빈 곳에도 칸이 똑같이 배정돼.`,
+				};
+			}
+			if (method === 'pq') {
+				// 조각(여기선 한 차원씩)마다 k-means로 대표값 학습
+				const ticksX = kmeans1d(xs, L);
+				const ticksY = kmeans1d(ys, L);
+				return {
+					ticksX,
+					ticksY,
+					rec: snap(ticksX, ticksY),
+					cells: 2 * L,
+					points: L * L,
+					bitsPerVector: 2 * bits,
+					note: `조각(여기선 x, y 한 차원씩)마다 k-means로 대표값 ${L}개를 학습했어. 칸이 데이터가 몰린 곳에 촘촘해져. 코드북 ${2 * L}칸으로 ${L}×${L}=${L * L}개 위치를 표현해.`,
+				};
+			}
+			if (method === 'bq') {
+				// 차원마다 평균보다 큰지(1) 작은지(0)만 남긴다. 복원 위치는 각 사분면의 평균
+				const splitAt = { x: xs.reduce((a, b) => a + b, 0) / xs.length, y: ys.reduce((a, b) => a + b, 0) / ys.length };
+				const code = (p: Point) => `${p.x > splitAt.x ? 1 : 0}${p.y > splitAt.y ? 1 : 0}`;
+				const groups = new Map<string, Point[]>();
+				for (const p of pts) groups.set(code(p), [...(groups.get(code(p)) ?? []), p]);
+				const center = new Map([...groups].map(([k, g]) => [k, { x: g.reduce((s, p) => s + p.x, 0) / g.length, y: g.reduce((s, p) => s + p.y, 0) / g.length }]));
+				return {
+					splitAt,
+					centers: [...center.values()],
+					rec: pts.map((p) => center.get(code(p))!),
+					cells: 4,
+					points: 4,
+					bitsPerVector: 2,
+					note: '차원마다 평균보다 큰지 작은지 1비트만 남겨. 2차원이면 사분면 4곳뿐이라 거의 다 뭉개져. 조각당 비트 수와 상관없이 고정이야.',
+				};
+			}
+			// 조각내지 않고 벡터 통째로 k-means. PQ와 같은 코드북 크기
+			const K = 2 * L;
+			const { centroids, assign } = kmeans(pts, K, seed * 13 + K);
+			return {
+				centers: centroids,
+				rec: assign.map((j) => centroids[j]),
+				cells: K,
+				points: K,
+				bitsPerVector: Math.ceil(Math.log2(K)),
+				note: `벡터를 조각내지 않고 통째로 k-means를 돌렸어. PQ와 같은 코드북 ${K}칸인데, 표현할 수 있는 위치도 딱 ${K}개뿐이야.`,
+			};
+		}
+
+		function draw() {
+			const q = quantize();
+			let o = '';
+			const square = (p: Point) =>
+				`<rect x="${f(p.x - 4.5)}" y="${f(p.y - 4.5)}" width="9" height="9" rx="1.5" fill="none" style="stroke:${COLOR.codebook}" stroke-width="1.6"/>`;
+
+			if (q.ticksX && q.ticksY) {
+				for (const x of q.ticksX) {
+					o += `<line x1="${f(x)}" y1="${PAD}" x2="${f(x)}" y2="${H - PAD}" style="stroke:${COLOR.codebook}" stroke-opacity="0.25"/>`;
+					o += `<rect x="${f(x - 3)}" y="${H - PAD + 4}" width="6" height="14" rx="1" style="fill:${COLOR.codebook}"/>`;
+				}
+				for (const y of q.ticksY) {
+					o += `<line x1="${PAD}" y1="${f(y)}" x2="${W - PAD}" y2="${f(y)}" style="stroke:${COLOR.codebook}" stroke-opacity="0.25"/>`;
+					o += `<rect x="${PAD - 18}" y="${f(y - 3)}" width="14" height="6" rx="1" style="fill:${COLOR.codebook}"/>`;
+				}
+			}
+			if (q.splitAt) {
+				const { x, y } = q.splitAt;
+				o += `<line x1="${f(x)}" y1="${PAD}" x2="${f(x)}" y2="${H - PAD}" style="stroke:${COLOR.split}" stroke-dasharray="4 3"/>`;
+				o += `<line x1="${PAD}" y1="${f(y)}" x2="${W - PAD}" y2="${f(y)}" style="stroke:${COLOR.split}" stroke-dasharray="4 3"/>`;
+			}
+			pts.forEach((p, i) => {
+				o += `<line x1="${f(p.x)}" y1="${f(p.y)}" x2="${f(q.rec[i].x)}" y2="${f(q.rec[i].y)}" style="stroke:${COLOR.error}" stroke-opacity="0.6"/>`;
+			});
+			for (const p of pts) o += `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="2.4" style="fill:${COLOR.point}"/>`;
+			const reconstructable = q.ticksX && q.ticksY ? q.ticksX.flatMap((x) => q.ticksY!.map((y) => ({ x, y }))) : (q.centers ?? []);
+			for (const p of reconstructable) o += square(p);
+			svg.innerHTML = o;
+
+			const error = pts.reduce((s, p, i) => s + Math.sqrt(squaredDistance(p, q.rec[i])), 0) / pts.length;
+			stat('cells').textContent = `${q.cells}칸`;
+			stat('points').textContent = `${q.points}곳`;
+			stat('size').textContent = `${q.bitsPerVector}비트`;
+			stat('error').textContent = `${error.toFixed(1)}px`;
+			status.textContent = q.note;
+		}
+
+		root.querySelectorAll<HTMLButtonElement>('[data-method]').forEach((b) =>
+			b.addEventListener('click', () => {
+				method = b.dataset.method as Method;
+				root.querySelectorAll<HTMLButtonElement>('[data-method]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+				draw();
+			}),
+		);
+		root.querySelector<HTMLInputElement>('[data-input="bits"]')!.addEventListener('input', (e) => {
+			bits = Number((e.target as HTMLInputElement).value);
+			root.querySelector<HTMLOutputElement>('[data-out="bits"]')!.textContent = String(bits);
+			draw();
+		});
+		root.querySelector<HTMLButtonElement>('[data-act="new"]')!.addEventListener('click', () => {
+			seed += 1;
+			makeData();
+			draw();
+		});
+
+		makeData();
+		draw();
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-quant]').forEach(setup);
+</script>

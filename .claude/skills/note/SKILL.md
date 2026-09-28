@@ -26,10 +26,14 @@ description: 지금까지 나눈 CS 개념 대화를 Retrospect 사이트의 노
   - 상태 전이, 순서도: ` ```mermaid ` 의 `stateDiagram-v2` 또는 `flowchart`
   - 단계별로 값이 바뀌는 과정 (경쟁 상태 등): 마크다운 표
   - 층층이 쌓인 구조 (메모리 구조, 스택 프레임, 헤더): `src/styles/diagram.css`의 `diagram-stack not-content` HTML (사용법은 파일 상단 주석)
-  - 직접 조작해볼 시각화: `src/components/`에 Astro 컴포넌트로 만든다. 색과 모서리는 `src/styles/tokens.css`의 역할 토큰(emphasis, path, result, reference, neutral)만 쓰고, 루트에 `not-content`를 붙인다. 범례에는 그림에 나오는 모든 표시를 실제 모양 그대로 넣는다.
+  - 직접 조작해볼 시각화: `src/components/<Name>Viz.astro`로 만든다 (예: `HnswViz.astro`, `IvfViz.astro`).
+    - 루트는 `class="viz not-content"`, 레이아웃과 버튼은 `src/styles/viz.css`의 `viz-*` 클래스만 쓴다. 컴포넌트 안에 버튼, 범례 스타일을 따로 만들지 않는다.
+    - 범례는 `VizLegend.astro`로 만들고, 그림에 나오는 모든 표시를 넣는다.
+    - 색은 `src/styles/tokens.css`의 역할 토큰(emphasis, path, result, reference, neutral)만 쓴다. 난수, 좌표 변환은 `src/scripts/viz.ts`를 쓴다.
+    - **노트에서는 설명하는 개념 바로 아래에** 넣고, 그 아래에 "해볼 것"을 번호 목록으로 붙인다. "직접 해보기" 섹션으로 따로 빼지 않는다.
   - 사용 예: `src/content/docs/os/process-vs-thread.md`, `src/content/docs/network/tcp-3-way-handshake.md`, `src/content/docs/database/vector-index-and-quantization.mdx`
   - `.mdx`에서는 HTML 주석(`<!-- -->`)을 쓸 수 없다. TODO는 `{/* TODO: 내 말로 써보기 */}`로 남긴다.
-- **직접 해보기**: 사용자가 직접 돌려본 코드나 명령이 있으면 결과와 함께 넣는다. 없으면 따라 해볼 수 있는 짧은 실험을 제안한다.
+- **직접 해보기**: 코드나 명령어로 해보는 실험만 넣는다. 사용자가 직접 돌려본 코드나 명령이 있으면 결과와 함께 넣고, 없으면 짧은 실험을 제안한다. 인터랙티브 시각화는 여기 넣지 않는다 (위 다이어그램 규칙 참고). 넣을 게 없으면 섹션을 뺀다.
 - **헷갈렸던 포인트**: 대화 중에 사용자가 되물었거나 오해를 바로잡은 지점.
 - **복습 퀴즈**: 2~4문항. 각 문항을 `<details><summary>Q. …</summary> 답 </details>` 형태로 답을 접어둔다.
 - **관련 개념**: 사이트에 노트가 있으면 `../../<category>/<slug>/` 같은 **상대 경로**로 링크한다 (사이트가 `/retrospect/` 아래에 배포되므로 `/`로 시작하는 절대 경로는 깨진다). 없으면 `(작성 예정)`이라고 적는다.

@@ -1,0 +1,54 @@
+---
+// 시각화 범례. 그림에 실제로 그리는 모양과 같은 견본을 그린다.
+// color에는 tokens.css의 역할 토큰(var(--rs-...))을 넣는다.
+type Shape =
+	| 'dot' // 일반 점
+	| 'small-dot' // 흐린 점
+	| 'big-dot' // 강조 점
+	| 'line' // 굵은 연결선
+	| 'thin-line' // 가는 연결선
+	| 'path' // 선 + 점 (거쳐 간 경로)
+	| 'ring' // 원 테두리
+	| 'dashed-ring' // 점선 원 테두리
+	| 'square' // 채운 네모
+	| 'square-outline' // 빈 네모
+	| 'area' // 칠한 영역
+	| 'tick' // 축 위 눈금
+	| 'cross'; // × 표시
+
+interface Props {
+	items: { shape: Shape; color: string; label: string }[];
+}
+
+const { items } = Astro.props;
+---
+
+<ul class="viz-legend">
+	{
+		items.map(({ shape, color, label }) => (
+			<li>
+				<svg viewBox="0 0 16 16" aria-hidden="true">
+					{shape === 'dot' && <circle cx="8" cy="8" r="2.8" style={`fill: ${color}`} />}
+					{shape === 'small-dot' && <circle cx="8" cy="8" r="1.8" style={`fill: ${color}`} />}
+					{shape === 'big-dot' && <circle cx="8" cy="8" r="4.5" style={`fill: ${color}`} />}
+					{shape === 'line' && <line x1="1" y1="8" x2="15" y2="8" style={`stroke: ${color}`} stroke-width="2.2" stroke-linecap="round" />}
+					{shape === 'thin-line' && <line x1="1" y1="8" x2="15" y2="8" style={`stroke: ${color}`} stroke-width="1.2" stroke-linecap="round" />}
+					{shape === 'path' && (
+						<>
+							<line x1="1" y1="12" x2="11" y2="5" style={`stroke: ${color}`} stroke-width="1.5" stroke-linecap="round" />
+							<circle cx="11" cy="5" r="3.5" style={`fill: ${color}`} />
+						</>
+					)}
+					{shape === 'ring' && <circle cx="8" cy="8" r="5.5" fill="none" style={`stroke: ${color}`} stroke-width="2" />}
+					{shape === 'dashed-ring' && <circle cx="8" cy="8" r="6" fill="none" style={`stroke: ${color}`} stroke-width="1.6" stroke-dasharray="2.5 2" />}
+					{shape === 'square' && <rect x="4" y="4" width="8" height="8" rx="1.5" style={`fill: ${color}`} />}
+					{shape === 'square-outline' && <rect x="4" y="4" width="8" height="8" rx="1.5" style={`fill: var(--rs-surface); stroke: ${color}`} stroke-width="1.4" />}
+					{shape === 'area' && <rect x="1" y="3" width="14" height="10" rx="2" style={`fill: ${color}; stroke: var(--rs-border)`} />}
+					{shape === 'tick' && <rect x="5" y="1" width="6" height="14" rx="1" style={`fill: ${color}`} />}
+					{shape === 'cross' && <path d="M4 4L12 12M4 12L12 4" style={`stroke: ${color}`} stroke-width="1.8" stroke-linecap="round" />}
+				</svg>
+				{label}
+			</li>
+		))
+	}
+</ul>
