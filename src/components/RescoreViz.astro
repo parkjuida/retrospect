@@ -1,5 +1,5 @@
 ---
-// 압축본(PQ)으로 후보를 넉넉히 뽑은 뒤 원본으로 다시 거리를 재서 상위 k개를 고르는 재채점 과정을 보여주는 시각화.
+// 압축본으로 후보를 (k × 오버샘플 배수)개 뽑고, 그 후보만 원본으로 다시 재서 상위 k개를 고르는 재채점 과정을 보여주는 시각화.
 // .mdx 노트에서 import 해서 <RescoreViz /> 로 쓴다. 공통 스타일은 src/styles/viz.css.
 import VizLegend from './VizLegend.astro';
 ---
@@ -15,11 +15,11 @@ import VizLegend from './VizLegend.astro';
 	<div class="viz-row">
 		<label class="viz-field">
 			<span>오버샘플 배수</span>
-			<input type="range" data-input="oversample" min="1" max="8" step="1" value="3" />
-			<output data-out="oversample">3</output>
+			<input type="range" data-input="over" min="1" max="8" step="1" value="3" />
+			<output data-out="over">3</output>
 		</label>
 		<label class="viz-field">
-			<span>조각당 비트 수</span>
+			<span>조각당 비트 수 (압축 정도)</span>
 			<input type="range" data-input="bits" min="1" max="4" step="1" value="2" />
 			<output data-out="bits">2</output>
 		</label>
@@ -67,7 +67,7 @@ import VizLegend from './VizLegend.astro';
 	const COLOR = {
 		codebook: 'var(--rs-emphasis)',
 		candidate: 'var(--rs-path)',
-		chosen: 'var(--rs-result)',
+		found: 'var(--rs-result)',
 		truth: 'var(--rs-reference)',
 		query: 'var(--rs-text-strong)',
 		point: 'var(--rs-neutral)',
@@ -79,66 +79,71 @@ import VizLegend from './VizLegend.astro';
 		const svg = root.querySelector<SVGSVGElement>('[data-map]')!;
 		const status = root.querySelector<HTMLElement>('[data-status]')!;
 		const stat = (name: string) => root.querySelector<HTMLElement>(`[data-stat="${name}"]`)!;
-		const output = (name: string) => root.querySelector<HTMLOutputElement>(`[data-out="${name}"]`)!;
 
 		let seed = 11;
 		let bits = 2;
-		let oversample = 3;
+		let over = 3;
 		let view: 'plain' | 'rescore' = 'rescore';
 		let pts: Point[] = [];
-		let codebookX: number[] = [];
-		let codebookY: number[] = [];
-		let compressed: Point[] = [];
+		let ticksX: number[] = [];
+		let ticksY: number[] = [];
+		let rec: Point[] = []; // 각 점의 압축본이 복원되는 위치
 		let query: Point = { x: 300, y: 180 };
 
 		const makeData = () => {
 			pts = blobPoints({ seed, width: W, height: H, pad: PAD, blobs: 6, perBlob: [22, 42], spread: [16, 56], noise: 30 });
 		};
 
-		/** 조각(x, y)마다 대표값을 학습하고, 각 점을 가장 가까운 대표값 조합으로 바꾼다 */
+		/** 조각(x, y)마다 k-means 대표값으로 압축 (2차원 PQ) */
 		function compress() {
 			const L = 2 ** bits;
-			codebookX = kmeans1d(pts.map((p) => p.x), L);
-			codebookY = kmeans1d(pts.map((p) => p.y), L);
-			compressed = pts.map((p) => ({ x: nearestValue(p.x, codebookX), y: nearestValue(p.y, codebookY) }));
+			ticksX = kmeans1d(
+				pts.map((p) => p.x),
+				L,
+			);
+			ticksY = kmeans1d(
+				pts.map((p) => p.y),
+				L,
+			);
+			rec = pts.map((p) => ({ x: nearestValue(p.x, ticksX), y: nearestValue(p.y, ticksY) }));
 		}
 
 		function search(q: Point) {
 			const ids = pts.map((_, i) => i);
-			// 압축 거리: 질문은 원본, 저장된 쪽은 압축본 (비대칭 거리 계산). 동점은 번호 순
-			const byCompressed = [...ids].sort((a, b) => sq(q, compressed[a]) - sq(q, compressed[b]) || a - b);
-			const byOriginal = (list: number[]) => [...list].sort((a, b) => sq(q, pts[a]) - sq(q, pts[b]));
+			// 압축 거리: 질문(원본) ↔ 저장된 점의 복원 위치. 동점이면 번호순
+			const byCompressed = [...ids].sort((a, b) => sq(q, rec[a]) - sq(q, rec[b]) || a - b);
+			const byTrue = (list: number[]) => [...list].sort((a, b) => sq(q, pts[a]) - sq(q, pts[b]));
 
-			const truth = byOriginal(ids).slice(0, K);
+			const truth = byTrue(ids).slice(0, K);
 			const plain = byCompressed.slice(0, K);
-			const candidates = byCompressed.slice(0, Math.min(pts.length, K * oversample));
-			const rescored = byOriginal(candidates).slice(0, K);
+			const candidates = byCompressed.slice(0, K * over);
+			const rescored = byTrue(candidates).slice(0, K);
 
 			const truthSet = new Set(truth);
 			const recall = (list: number[]) => list.filter((i) => truthSet.has(i)).length;
-			const kthDistance = sq(q, compressed[byCompressed[K - 1]]);
-			const ties = byCompressed.filter((i) => sq(q, compressed[i]) === kthDistance).length;
-			return { truth, plain, candidates, rescored, recallPlain: recall(plain), recallRescored: recall(rescored), ties };
+			const kthDistance = sq(q, rec[byCompressed[K - 1]]);
+			const ties = byCompressed.filter((i) => sq(q, rec[i]) === kthDistance).length;
+			return { truth, plain, candidates, rescored, plainRecall: recall(plain), rescoredRecall: recall(rescored), ties };
 		}
 
 		function draw() {
 			const s = search(query);
 			const rescoring = view === 'rescore';
-			const candidateSet = new Set(rescoring ? s.candidates : []);
+			const candidates = new Set(rescoring ? s.candidates : []);
 			let o = '';
 
-			for (const x of codebookX) {
-				for (const y of codebookY) {
-					o += `<rect x="${f(x - 4.5)}" y="${f(y - 4.5)}" width="9" height="9" rx="1.5" fill="none" style="stroke:${COLOR.codebook}" stroke-width="1.4"/>`;
+			for (const x of ticksX) {
+				for (const y of ticksY) {
+					o += `<rect x="${f(x - 4)}" y="${f(y - 4)}" width="8" height="8" rx="1.5" fill="none" style="stroke:${COLOR.codebook}" stroke-opacity="0.6" stroke-width="1.3"/>`;
 				}
 			}
 			pts.forEach((p, i) => {
-				o += candidateSet.has(i)
+				o += candidates.has(i)
 					? `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="3.2" style="fill:${COLOR.candidate}"/>`
 					: `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="2.3" style="fill:${COLOR.point}"/>`;
 			});
 			for (const i of rescoring ? s.rescored : s.plain) {
-				o += `<circle cx="${f(pts[i].x)}" cy="${f(pts[i].y)}" r="7" fill="none" style="stroke:${COLOR.chosen}" stroke-width="2.2"/>`;
+				o += `<circle cx="${f(pts[i].x)}" cy="${f(pts[i].y)}" r="7" fill="none" style="stroke:${COLOR.found}" stroke-width="2.2"/>`;
 			}
 			for (const i of s.truth) {
 				o += `<circle cx="${f(pts[i].x)}" cy="${f(pts[i].y)}" r="10.5" fill="none" style="stroke:${COLOR.truth}" stroke-width="1.5" stroke-dasharray="3 2.5"/>`;
@@ -146,13 +151,12 @@ import VizLegend from './VizLegend.astro';
 			o += `<path d="M${f(query.x - 6)} ${f(query.y - 6)}L${f(query.x + 6)} ${f(query.y + 6)}M${f(query.x - 6)} ${f(query.y + 6)}L${f(query.x + 6)} ${f(query.y - 6)}" style="stroke:${COLOR.query}" stroke-width="2" stroke-linecap="round"/>`;
 			svg.innerHTML = o;
 
-			stat('plain').textContent = `${s.recallPlain} / ${K}`;
-			stat('rescore').textContent = `${s.recallRescored} / ${K}`;
-			stat('reads').textContent = `${rescoring ? s.candidates.length : 0}개`;
+			stat('plain').textContent = `${s.plainRecall} / ${K}`;
+			stat('rescore').textContent = `${s.rescoredRecall} / ${K}`;
+			stat('reads').textContent = rescoring ? `${s.candidates.length}개` : '0개';
 			status.textContent = rescoring
-				? `압축본 거리로 후보 ${s.candidates.length}개(${K} × ${oversample})를 뽑고, 그것만 원본으로 다시 재서 ${K}개를 골랐어. 진짜 ${K}개 중 ${s.recallRescored}개를 찾았어.` +
-					(s.recallRescored < K ? ' 후보에 아예 못 든 정답은 재채점으로도 못 살려. 배수를 올려봐.' : '')
-				: `압축본 거리만으로 ${K}개를 골랐어. 진짜 ${K}개 중 ${s.recallPlain}개. ${K}등 자리에서 압축 거리가 똑같은 점이 ${s.ties}개라, 그중 누가 뽑힐지는 사실상 운이야.`;
+				? `압축본 거리로 후보 ${s.candidates.length}개(5 × ${over})를 뽑고, 그것만 원본으로 다시 재서 5개를 골랐어. 진짜 5개 중 ${s.rescoredRecall}개를 찾았어.${s.rescoredRecall < K ? ' 후보에 아예 못 든 정답은 재채점으로도 못 살려. 배수를 올려봐.' : ''}`
+				: `압축본 거리만으로 5개를 골랐어. 진짜 5개 중 ${s.plainRecall}개. 5등 자리에서 압축 거리가 똑같은 점이 ${s.ties}개라, 그중 누가 뽑힐지는 사실상 운이야.`;
 		}
 
 		function setView(next: 'plain' | 'rescore') {
@@ -164,16 +168,18 @@ import VizLegend from './VizLegend.astro';
 		const randomQuery = (): Point => ({ x: PAD + Math.random() * (W - 2 * PAD), y: PAD + Math.random() * (H - 2 * PAD) });
 
 		root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view as 'plain' | 'rescore')));
-		root.querySelector<HTMLInputElement>('[data-input="oversample"]')!.addEventListener('input', (e) => {
-			oversample = Number((e.target as HTMLInputElement).value);
-			output('oversample').textContent = String(oversample);
-			draw();
-		});
-		root.querySelector<HTMLInputElement>('[data-input="bits"]')!.addEventListener('input', (e) => {
-			bits = Number((e.target as HTMLInputElement).value);
-			output('bits').textContent = String(bits);
+
+		const slider = (name: string, apply: (v: number) => void) =>
+			root.querySelector<HTMLInputElement>(`[data-input="${name}"]`)!.addEventListener('input', (e) => {
+				const v = Number((e.target as HTMLInputElement).value);
+				root.querySelector<HTMLOutputElement>(`[data-out="${name}"]`)!.textContent = String(v);
+				apply(v);
+				draw();
+			});
+		slider('over', (v) => (over = v));
+		slider('bits', (v) => {
+			bits = v;
 			compress();
-			draw();
 		});
 
 		const actions: Record<string, () => void> = {
@@ -190,7 +196,7 @@ import VizLegend from './VizLegend.astro';
 			miss: () => {
 				for (let t = 0; t < 1500; t++) {
 					const q = randomQuery();
-					if (search(q).recallPlain <= K - 2) {
+					if (search(q).plainRecall <= K - 2) {
 						query = q;
 						setView('plain');
 						return;
