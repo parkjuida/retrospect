@@ -11,7 +11,7 @@ description: 지금까지 나눈 CS 개념 대화를 Retrospect 사이트의 노
 
 1. `templates/note.md`와 `src/categories.mjs`를 읽는다.
 2. **카테고리를 고른다.** 맞는 게 없으면 `src/categories.mjs`에 새 항목(`slug`, 한국어 `label`)을 추가한다.
-3. **파일 경로**: `src/content/docs/<category-slug>/<english-kebab-case>.md`. 같은 개념의 노트가 이미 있으면 새로 만들지 말고 그 노트를 보강한다.
+3. **파일 경로**: `src/content/docs/<category-slug>/<english-kebab-case>.md`. `src/components/`의 컴포넌트(예: `HnswViz.astro`)를 넣을 때만 `.mdx`로 만들고 `import`한다. 같은 개념의 노트가 이미 있으면 새로 만들지 말고 그 노트를 보강한다.
 4. 템플릿의 섹션 순서대로 채운다 (아래 규칙 참고).
 5. `npm run build`로 빌드가 통과하는지 확인한다.
 6. 만든 파일 경로와 함께 **사용자가 직접 손봐야 할 부분**을 짧게 알려준다.
@@ -25,8 +25,10 @@ description: 지금까지 나눈 CS 개념 대화를 Retrospect 사이트의 노
   - 시간 순서로 주고받는 흐름 (프로토콜, 호출 순서): ` ```mermaid ` 의 `sequenceDiagram`
   - 상태 전이, 순서도: ` ```mermaid ` 의 `stateDiagram-v2` 또는 `flowchart`
   - 단계별로 값이 바뀌는 과정 (경쟁 상태 등): 마크다운 표
-  - 층층이 쌓인 구조 (메모리 구조, 스택 프레임, 헤더): `src/styles/diagram.css`의 `diagram-stack` HTML (사용법은 파일 상단 주석)
-  - 사용 예: `src/content/docs/os/process-vs-thread.md`, `src/content/docs/network/tcp-3-way-handshake.md`
+  - 층층이 쌓인 구조 (메모리 구조, 스택 프레임, 헤더): `src/styles/diagram.css`의 `diagram-stack not-content` HTML (사용법은 파일 상단 주석)
+  - 직접 조작해볼 시각화: `src/components/`에 Astro 컴포넌트로 만든다. 색과 모서리는 `src/styles/tokens.css`의 역할 토큰(emphasis, path, result, reference, neutral)만 쓰고, 루트에 `not-content`를 붙인다. 범례에는 그림에 나오는 모든 표시를 실제 모양 그대로 넣는다.
+  - 사용 예: `src/content/docs/os/process-vs-thread.md`, `src/content/docs/network/tcp-3-way-handshake.md`, `src/content/docs/database/vector-index-and-quantization.mdx`
+  - `.mdx`에서는 HTML 주석(`<!-- -->`)을 쓸 수 없다. TODO는 `{/* TODO: 내 말로 써보기 */}`로 남긴다.
 - **직접 해보기**: 사용자가 직접 돌려본 코드나 명령이 있으면 결과와 함께 넣는다. 없으면 따라 해볼 수 있는 짧은 실험을 제안한다.
 - **헷갈렸던 포인트**: 대화 중에 사용자가 되물었거나 오해를 바로잡은 지점.
 - **복습 퀴즈**: 2~4문항. 각 문항을 `<details><summary>Q. …</summary> 답 </details>` 형태로 답을 접어둔다.

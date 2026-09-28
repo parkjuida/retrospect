@@ -31,18 +31,18 @@ tags: [os, process, thread, concurrency]
 
 ### 메모리 구조: 무엇을 공유하고 무엇을 따로 갖나
 
-<div class="diagram-stack">
+<div class="diagram-stack not-content">
   <div class="title">프로세스 A의 주소 공간</div>
   <div class="segs">
-    <div class="seg tone-1">스택 (스레드 1)</div>
-    <div class="seg tone-1">스택 (스레드 2)</div>
+    <div class="seg emphasis">스택 (스레드 1)</div>
+    <div class="seg emphasis">스택 (스레드 2)</div>
     <div class="seg gap">↓ 스택은 아래로, 힙은 위로 자란다 ↑</div>
-    <div class="seg tone-2">힙 (malloc, new)</div>
-    <div class="seg tone-2">데이터 (전역 변수)</div>
-    <div class="seg tone-2">코드 (기계어 명령)</div>
+    <div class="seg neutral">힙 (malloc, new)</div>
+    <div class="seg neutral">데이터 (전역 변수)</div>
+    <div class="seg neutral">코드 (기계어 명령)</div>
   </div>
   <div class="note">+ 열린 파일, 소켓 등도 공유</div>
-  <div class="legend"><span class="tone-1">스레드마다 따로</span><span class="tone-2">모든 스레드가 공유</span></div>
+  <div class="legend"><span class="emphasis">스레드마다 따로</span><span class="neutral">모든 스레드가 공유</span></div>
 </div>
 
 스레드가 각자 갖는 것은 **스택, 레지스터 값, PC(Program Counter)** 뿐이다. 즉 "어디를 실행 중이고 어떤 함수를 거쳐 왔는지"라는 실행 흐름만 갖는다.

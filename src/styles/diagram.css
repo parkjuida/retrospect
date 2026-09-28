@@ -2,39 +2,36 @@
  * 층층이 쌓인 구조 다이어그램 (메모리 구조, 스택 프레임, 패킷 헤더 등).
  * 코드 블록 ASCII 그림은 한글 폭 때문에 줄이 어긋나서 HTML로 그린다.
  *
- * <div class="diagram-stack">
+ * <div class="diagram-stack not-content">
  *   <div class="title">프로세스 주소 공간</div>
  *   <div class="segs">
- *     <div class="seg tone-1">스택</div>
+ *     <div class="seg emphasis">스택</div>
  *     <div class="seg gap">↓ ↑</div>
- *     <div class="seg tone-2">힙</div>
+ *     <div class="seg neutral">힙</div>
  *   </div>
- *   <div class="legend"><span class="tone-1">따로</span><span class="tone-2">공유</span></div>
+ *   <div class="legend"><span class="emphasis">따로</span><span class="neutral">공유</span></div>
  * </div>
  *
- * tone-1: 강조색, tone-2: 회색, tone-3: 초록. gap: 빈 공간.
+ * not-content: Starlight 본문 스타일(문단 간격 등)이 도식 안에 끼어들지 않게 한다.
+ * 색 클래스는 tokens.css의 역할 이름을 그대로 쓴다: emphasis, path, result, reference, neutral.
+ * gap: 빈 공간.
  */
 
-.sl-markdown-content .diagram-stack {
+.diagram-stack {
 	max-width: 26rem;
 	margin-inline: auto;
 	font-size: var(--sl-text-sm);
-}
-
-.sl-markdown-content .diagram-stack * {
-	margin-top: 0;
+	color: var(--rs-text);
 }
 
 .diagram-stack .title,
 .diagram-stack .note {
 	text-align: center;
-	color: var(--sl-color-gray-3);
+	color: var(--rs-text-muted);
 }
 
 .diagram-stack .title {
-	margin-bottom: 0.375rem;
-	font-weight: 600;
-	color: var(--sl-color-white);
+	margin-bottom: 0.25rem;
 }
 
 .diagram-stack .note {
@@ -42,76 +39,83 @@
 }
 
 .diagram-stack .segs {
-	border: 1px solid var(--sl-color-gray-5);
-	border-radius: 0.375rem;
+	border: 1px solid var(--rs-border);
+	border-radius: var(--rs-radius);
 	overflow: hidden;
 }
 
 .diagram-stack .seg {
 	padding: 0.5rem 0.75rem;
 	text-align: center;
-	background: var(--sl-color-gray-6);
-	color: var(--sl-color-white);
+	background: var(--rs-neutral-low);
+	color: var(--rs-neutral-high);
 }
 
 .diagram-stack .seg + .seg {
-	border-top: 1px solid var(--sl-color-gray-5);
-}
-
-.diagram-stack .tone-1 {
-	background: var(--sl-color-accent-low);
-	color: var(--sl-color-accent-high);
-}
-
-.diagram-stack .tone-2 {
-	background: var(--sl-color-gray-6);
-	color: var(--sl-color-white);
-}
-
-.diagram-stack .tone-3 {
-	background: var(--sl-color-green-low);
-	color: var(--sl-color-green-high);
+	border-top: 1px solid var(--rs-border);
 }
 
 .diagram-stack .seg.gap {
 	padding-block: 1rem;
-	background: var(--sl-color-bg);
-	color: var(--sl-color-gray-3);
+	background: var(--rs-surface);
+	color: var(--rs-text-muted);
 }
 
 .diagram-stack .legend {
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
-	gap: 0.5rem 1rem;
-	margin-top: 0.75rem;
-	color: var(--sl-color-gray-2);
+	gap: 0.25rem 1rem;
+	margin-top: 0.5rem;
+	font-size: var(--sl-text-xs);
+	color: var(--rs-text-muted);
 }
 
 .diagram-stack .legend span {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.375rem;
-	background: none;
-	color: inherit;
 }
 
 .diagram-stack .legend span::before {
 	content: '';
 	width: 0.875rem;
 	height: 0.875rem;
-	border-radius: 0.2rem;
-	border: 1px solid var(--sl-color-gray-5);
+	border: 1px solid var(--rs-border);
+	border-radius: calc(var(--rs-radius) / 2);
+	background: var(--swatch);
 }
 
-.diagram-stack .legend .tone-1::before {
-	background: var(--sl-color-accent-low);
+/* 역할별 색: 칸은 배경과 글자, 범례는 견본 색만 바꾼다 */
+.diagram-stack .emphasis {
+	--swatch: var(--rs-emphasis-low);
+}
+.diagram-stack .path {
+	--swatch: var(--rs-path-low);
+}
+.diagram-stack .result {
+	--swatch: var(--rs-result-low);
+}
+.diagram-stack .reference {
+	--swatch: var(--rs-reference-low);
+}
+.diagram-stack .neutral {
+	--swatch: var(--rs-neutral-low);
 }
 
-.diagram-stack .legend .tone-2::before {
-	background: var(--sl-color-gray-6);
+.diagram-stack .seg.emphasis {
+	background: var(--rs-emphasis-low);
+	color: var(--rs-emphasis-high);
 }
-
-.diagram-stack .legend .tone-3::before {
-	background: var(--sl-color-green-low);
+.diagram-stack .seg.path {
+	background: var(--rs-path-low);
+	color: var(--rs-path-high);
+}
+.diagram-stack .seg.result {
+	background: var(--rs-result-low);
+	color: var(--rs-result-high);
+}
+.diagram-stack .seg.reference {
+	background: var(--rs-reference-low);
+	color: var(--rs-reference-high);
 }
